@@ -19,6 +19,8 @@ package.json                  # pi 包清单（"pi": {"extensions": ["extensions
 
 ## 关键约定与坑（改代码前必读）
 
+0. **tty7 有两个二进制**：`/Applications/tty7.app/Contents/MacOS/tty7`（CLI，即 `/usr/local/bin/tty7`，支持 `tab ls --json`、`events --json`、`tab rename`）和 `tty7-app`（GUI bundle，只支持 `agent-hook` verb，其他命令静默返回空）。扩展用 `TTY7_CLI` 环境变量可覆盖，默认 `/usr/local/bin/tty7`。官方 bridge（`~/.pi/agent/extensions/tty7/index.ts`）用的 EXE 是 `tty7-app`——那是给 `agent-hook` 用的，别混用。
+
 1. **标题最后一笔必须是本扩展写的纯 `{name}`**。pi 核心会在 `session_info_changed` 之后用 `π - {name} - {cwd}` 格式重写标题，且晚于扩展 handler。所以所有标题写入都经 `setTitleSoon()`（setTimeout 0 延迟一 tick）。标题格式用户明确要求**只显示 `{name}`**，不要加前后缀。
 2. **命名是 fire-and-forget 并发**：在 `before_agent_start`（拿到 prompt 瞬间）就发小请求，不阻塞回合。不能等 `agent_end`——用户嫌那样反应慢，这是明确的产品决策。
 3. **代数计数器 `gen`**：每次会话切换/退出 `gen++`。命名请求在途时若 gen 变了，结果必须丢弃，防止把名字写到别的会话上。
@@ -27,6 +29,7 @@ package.json                  # pi 包清单（"pi": {"extensions": ["extensions
 6. **失败静默 + 自动重试**：模型调用 20s 超时或出错时静默返回，靠 `before_agent_start` 在下一轮重试。不弹通知。
 7. **session_shutdown** 时 `applyName(null)` 重置标题，Tab 回落 tty7 默认。
 8. 标题模型输出必须过 `sanitizeTitle()`：取首个非空行、去引号/书名号/尾标点、截断 20 字符。
+9. **双向同步**：`tty7 events --json` 常驻子进程监听 `tab_renamed`（只在用户手动改名时发出；OSC 标题写入走 `pane_facts.osc_title`→tab label，不会触发 rename 事件，故无回环）。pane→tab 映射用 `$TTY7_PANE` 反查 `tab ls --json`，事件 tab id 对不上时惰性重查。收到匹配改名 → `manual=true`（与 `/name` 同优先级）→ `setSessionName`。空名/同名 no-op。`session_shutdown` 杀子进程，进程崩溃静默、下次 session_start 重启。
 
 ## 命令
 

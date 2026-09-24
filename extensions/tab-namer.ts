@@ -10,6 +10,12 @@
  *   auto-naming never runs again for that session.
  * - resume/new/fork/quit: title follows the session's name; on shutdown the
  *   title is reset so the tab falls back to tty7's default.
+ * - Reverse sync: a manual tab rename inside tty7 (tab_renamed event from
+ *   `tty7 events --json`) is treated like `/name` — manual priority, auto-
+ *   naming never overrides it afterwards. Bidirectional, no loop: our own
+ *   OSC writes never emit tab_renamed.
+ * - quit: the events listener child process is killed; if it dies mid-session
+ *   reverse sync goes silent until the next session_start.
  *
  * Title channel note: pi core also writes the title (`π - name - cwd`) in its
  * own session_info_changed handler, which runs AFTER extension handlers. All
@@ -17,6 +23,7 @@
  * write exactly `{name}`.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
 const NAME_PROMPT =
 	"根据下面的用户消息记录，为这个会话起一个简短标题：不超过10个字，概括整个会话的主要意图，中文，不加引号、句号或任何前后缀，直接输出标题本身。\n\n<user-messages>\n";
@@ -24,6 +31,9 @@ const MAX_TOKENS = 512;
 const NAME_TIMEOUT_MS = 20_000;
 const HISTORY_MESSAGES = 10;
 const HISTORY_CHARS = 2000;
+// tty7 CLI resolves via PATH (installed at /usr/local/bin/tty7 by the app);
+// fall back to the app bundle binary for installs without the symlink.
+const TTY7_EXE = process.env["TTY7_CLI"] ?? "/usr/local/bin/tty7";
 
 /** Extract a clean title from raw model output. Exported for the self-test. */
 export function sanitizeTitle(raw: string): string {
@@ -70,6 +80,74 @@ export default function (pi: ExtensionAPI) {
 	let suppressInfo = false; // the next session_info_changed is our own setSessionName
 	let inFlight = false;
 	let lastCustom: string | null = null; // title we manage; null = leave terminal default
+
+	// --- reverse sync: tty7 tab rename → session name -----------------------
+	// tty7 emits tab_renamed ONLY for manual renames (OSC title writes land in
+	// the tab's label and fire pane_facts instead — verified). So any matching
+	// rename event is user intent and gets manual priority.
+	let eventsProc: ChildProcess | null = null;
+	let ourTabId: string | null = null;
+	let eventsBuf = "";
+
+	function resolveTabId(): string | null {
+		const pane = Number(process.env["TTY7_PANE"]);
+		if (!Number.isFinite(pane)) return null;
+		try {
+			const out = spawnSync(TTY7_EXE, ["tab", "ls", "--json"], { encoding: "utf8", timeout: 5000 });
+			const tabs = (JSON.parse(out.stdout ?? "{}") as { tabs?: Array<{ id: string; panes: number[] }> }).tabs ?? [];
+			return tabs.find((t) => t.panes.includes(pane))?.id ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	function stopEvents() {
+		eventsProc?.kill();
+		eventsProc = null;
+		eventsBuf = "";
+	}
+
+	function startEvents(pi: ExtensionAPI) {
+		stopEvents();
+		ourTabId = resolveTabId();
+		try {
+			eventsProc = spawn(TTY7_EXE, ["events", "--json"], { stdio: ["ignore", "pipe", "ignore"] });
+		} catch {
+			return; // silent: reverse sync is best-effort
+		}
+		eventsProc.stdout!.on("data", (chunk: Buffer) => {
+			eventsBuf += chunk.toString();
+			let nl: number;
+			while ((nl = eventsBuf.indexOf("\n")) >= 0) {
+				const line = eventsBuf.slice(0, nl).trim();
+				eventsBuf = eventsBuf.slice(nl + 1);
+				if (!line) continue;
+				let renamed: { tab?: string; name?: string } | undefined;
+				try {
+					const evt = JSON.parse(line) as { layout?: { delta?: { tab_renamed?: { tab: string; name: string } } } };
+					renamed = evt.layout?.delta?.tab_renamed;
+				} catch {
+					continue; // partial/malformed line
+				}
+				if (!renamed || typeof renamed.name !== "string") continue;
+				// Lazy re-resolve: session may have moved to another tab (resume etc.).
+				if (ourTabId !== renamed.tab) {
+					ourTabId = resolveTabId();
+					if (ourTabId !== renamed.tab) continue;
+				}
+				const name = renamed.name.trim();
+				if (!name) continue; // cleared/whitespace rename → ignore
+				if (pi.getSessionName() === name) continue; // no-op rename
+				manual = true; // user intent: auto-naming never overrides from here
+				suppressInfo = true;
+				pi.setSessionName(name);
+				applyName(name);
+			}
+		});
+		eventsProc.on("exit", () => {
+			eventsProc = null;
+		});
+	}
 
 	// pi core rewrites the title after extension handlers on session_info_changed;
 	// a one-tick defer makes our write the final one.
@@ -150,6 +228,7 @@ export default function (pi: ExtensionAPI) {
 		suppressInfo = false;
 		inFlight = false;
 		applyName(pi.getSessionName() ?? null);
+		startEvents(pi);
 		// Resumed a session that was never named → name it from its history now.
 		if (event.reason === "resume" || event.reason === "fork") tryName(ctx);
 	});
@@ -165,6 +244,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", () => {
 		gen++;
+		stopEvents();
 		applyName(null);
 	});
 
