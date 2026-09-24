@@ -109,6 +109,8 @@ export default function (pi: ExtensionAPI) {
 		eventsBuf = "";
 	}
 
+	let lastCtx: ExtensionContext | null = null; // for ui.notify outside event handlers
+
 	function startEvents(pi: ExtensionAPI) {
 		stopEvents();
 		const newTabId = resolveTabId();
@@ -154,6 +156,7 @@ export default function (pi: ExtensionAPI) {
 				suppressInfo = true;
 				pi.setSessionName(name);
 				applyName(name);
+				lastCtx?.ui.notify(`Session name set: ${name}`, "info");
 			}
 		});
 		eventsProc.on("exit", () => {
@@ -265,6 +268,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	pi.on("session_start", (event, ctx) => {
+		lastCtx = ctx;
 		gen++;
 		manual = false;
 		suppressInfo = false;
