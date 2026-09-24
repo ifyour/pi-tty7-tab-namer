@@ -1,6 +1,6 @@
 # pi-tty7-tab-namer
 
-**pi 扩展**：用大模型自动为会话命名，并把名字同步到 [tty7](https://github.com/l0ng-ai/tty7) 的 Tab 标题上。手动 `/name` 永远优先。
+**pi 扩展**：用大模型自动为会话命名，并把名字同步到 [tty7](https://github.com/l0ng-ai/tty7) 的 Tab 标题上。
 
 在 tty7 里开十个 pi 会话，每个 Tab 是什么任务一目了然——不需要点进去看。
 
