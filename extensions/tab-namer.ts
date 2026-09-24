@@ -111,7 +111,9 @@ export default function (pi: ExtensionAPI) {
 
 	function startEvents(pi: ExtensionAPI) {
 		stopEvents();
-		ourTabId = resolveTabId();
+		const newTabId = resolveTabId();
+		if (newTabId !== ourTabId) appliedTabName = null; // new tab → its name field state is unknown
+		ourTabId = newTabId;
 		try {
 			eventsProc = spawn(TTY7_EXE, ["events", "--json"], { stdio: ["ignore", "pipe", "ignore"] });
 		} catch {
