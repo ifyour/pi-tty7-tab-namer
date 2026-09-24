@@ -1,5 +1,5 @@
 {
-	"name": "pi-tty7-tab-sync",
+	"name": "pi-tty7-tab-namer",
 	"version": "0.1.0",
 	"description": "Auto-name pi sessions with an LLM and sync the name to the tty7 tab title. Manual /name always wins.",
 	"type": "module",
@@ -7,7 +7,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/ifyour/tty7-tab-sync.git"
+		"url": "git+https://github.com/ifyour/pi-tty7-tab-namer.git"
 	},
 	"pi": {
 		"extensions": ["extensions/*.ts"]

@@ -1,4 +1,4 @@
-# pi-tty7-tab-sync
+# pi-tty7-tab-namer
 
 **pi 扩展**：用大模型自动为会话命名，并把名字同步到 [tty7](https://github.com/l0ng-ai/tty7) 的 Tab 标题上。手动 `/name` 永远优先。
 
@@ -22,19 +22,19 @@ Tab 1: 调试tty7标签同步    Tab 2: 重构用户服务    Tab 3: 修复登�
 前提：在 [tty7](https://github.com/l0ng-ai/tty7) 终端内运行 pi（本扩展只在 `TTY7` 环境变量存在时激活）。
 
 ```bash
-pi install git:github.com/ifyour/tty7-tab-sync
+pi install git:github.com/ifyour/pi-tty7-tab-namer
 ```
 
 或从 npm（已发布时）：
 
 ```bash
-pi install npm:pi-tty7-tab-sync
+pi install npm:pi-tty7-tab-namer
 ```
 
 或本地试用（不写入配置，仅本次生效）：
 
 ```bash
-pi -e /path/to/tty7-tab-sync
+pi -e /path/to/pi-tty7-tab-namer
 ```
 
 > 如果你之前手动装过 `~/.pi/agent/extensions/tty7-tab-name.ts`，请先删除，避免重复加载。
@@ -62,8 +62,8 @@ pi -e /path/to/tty7-tab-sync
 ## 开发
 
 ```bash
-git clone https://github.com/ifyour/tty7-tab-sync
-cd tty7-tab-sync
+git clone https://github.com/ifyour/pi-tty7-tab-namer
+cd pi-tty7-tab-namer
 npm test          # 标题清洗逻辑自检
 pi -e .           # 本地试用
 ```
