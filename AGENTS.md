@@ -31,7 +31,7 @@ package.json                  # pi 包清单（"pi": {"extensions": ["extensions
 8. 标题模型输出必须过 `sanitizeTitle()`：取首个非空行、去引号/书名号/尾标点、截断 20 字符。
 9. **tty7 Tab 的 name 与 label 是两个字段**：OSC 标题只写 `label`；用户手动改 Tab 名写 `name`，且 **GUI 显示优先 `name`**（实测结论）。所以一旦 tab 有 name，仅靠 OSC 的内部命名会被遮蔽——内部命名（`/name`、自动命名、resume 已命名会话）必须同时调 `tty7 tab rename <tabUUID> <name>`（`tab rename` 支持 UUID 直连）。改名回空串 `""` 可清空 name 字段。
 10. **双向同步**：`tty7 events --json` 常驻子进程监听 `tab_renamed`（只在用户手动改名时发出；本扩展的 OSC 写入只产生 `pane_facts.osc_title`，不触发 rename 事件，故无回环）。pane→tab 映射用 `$TTY7_PANE` 反查 `tab ls --json`，事件 tab id 对不上时惰性重查。收到匹配改名 → `manual=true`（与 `/name` 同优先级）→ `setSessionName`。空名/同名 no-op。`session_shutdown` 杀子进程，进程崩溃静默、下次 session_start 重启。
-11. **双向同步的三个状态标志**（防止事件回声把自动命名误升为手动）：`selfRename` 标记自己发出的 rename，回声事件匹配后忽略；`appliedTabName` 缓存当前 tab name，同名不发冗余 rename；`tabNameOurs` 标记 tab name 是本扩展写的——只有它为 true 时，shutdown/切换会话才清空 tab name 回落默认（用户手改的名字永久保留）。
+11. **双向同步的三个状态标志**（防止事件回声把自动命名误升为手动）：`selfRename` 标记自己发出的 rename，回声事件匹配后忽略；`appliedTabName` 缓存当前 tab name，同名不发冗余 rename；`tabNameOurs` 标记 tab name 是本扩展写的——只有它为 true 时，shutdown/切换会话才清空 tab name 回落默认（用户手改的名字永久保留）。例外：`session_start` reason === "new"（`/new`）视为完整新周期，tab name 一律清空回落默认，包括反向同步来的手动名。
 
 ## 命令
 

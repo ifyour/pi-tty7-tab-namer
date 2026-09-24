@@ -273,9 +273,14 @@ export default function (pi: ExtensionAPI) {
 		manual = false;
 		suppressInfo = false;
 		inFlight = false;
-		// Switching sessions: a tab name we wrote for the previous session no
-		// longer applies; clear it before the new session's name lands.
-		if (tabNameOurs && ourTabId) {
+		// /new is a full new cycle: the tab always falls back to the default, even
+		// when the current name came from a manual tty7 rename (reverse sync).
+		if (event.reason === "new" && appliedTabName) {
+			tabRename("");
+			tabNameOurs = false;
+		} else if (tabNameOurs && ourTabId) {
+			// Switching sessions: a tab name we wrote for the previous session no
+			// longer applies; clear it before the new session's name lands.
 			tabNameOurs = false;
 			appliedTabName = null;
 			try {
