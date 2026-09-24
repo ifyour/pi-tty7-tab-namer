@@ -1,0 +1,22 @@
+{
+	"name": "pi-tty7-tab-sync",
+	"version": "0.1.0",
+	"description": "Auto-name pi sessions with an LLM and sync the name to the tty7 tab title. Manual /name always wins.",
+	"type": "module",
+	"keywords": ["pi-package", "pi", "tty7", "terminal", "tab-title", "session-name"],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ifyour/tty7-tab-sync.git"
+	},
+	"pi": {
+		"extensions": ["extensions/*.ts"]
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-agent-core": "*",
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"scripts": {
+		"test": "node --experimental-strip-types test/sanitize.test.ts"
+	}
+}
