@@ -1,0 +1,56 @@
+<svg viewBox="0 0 1200 340" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+  <title>pi-tty7-tab-namer：tty7 Tab 栏里每个 pi 会话都有自动生成的中文标题</title>
+  <desc>一个 tty7 终端窗口，Tab 栏显示三个由大模型自动命名的 pi 会话标签：调试tty7标签同步、重构用户服务、修复登录空白页。</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161b26"/>
+      <stop offset="1" stop-color="#0f131c"/>
+    </linearGradient>
+    <linearGradient id="accentTab" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c3547"/>
+      <stop offset="1" stop-color="#232b3b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- window -->
+  <rect x="0" y="0" width="1200" height="340" rx="18" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="1199" height="339" rx="17.5" fill="none" stroke="#2e3648" stroke-width="1"/>
+
+  <!-- tab bar -->
+  <rect x="0" y="0" width="1200" height="64" rx="18" fill="#12161f"/>
+  <rect x="0" y="46" width="1200" height="18" fill="#12161f"/>
+
+  <!-- tab 1 (active) -->
+  <rect x="24" y="10" width="248" height="44" rx="10" fill="url(#accentTab)" stroke="#3d4a63" stroke-width="1"/>
+  <circle cx="48" cy="32" r="5" fill="#5fd0a0"/>
+  <text x="66" y="38" font-size="20" fill="#e8edf5">调试tty7标签同步</text>
+
+  <!-- tab 2 -->
+  <rect x="284" y="10" width="204" height="44" rx="10" fill="#1a2030" stroke="#272f42" stroke-width="1"/>
+  <circle cx="308" cy="32" r="5" fill="#3d4a63"/>
+  <text x="326" y="38" font-size="20" fill="#8f9bb0">重构用户服务</text>
+
+  <!-- tab 3 -->
+  <rect x="500" y="10" width="212" height="44" rx="10" fill="#1a2030" stroke="#272f42" stroke-width="1"/>
+  <circle cx="524" cy="32" r="5" fill="#3d4a63"/>
+  <text x="542" y="38" font-size="20" fill="#8f9bb0">修复登录空白页</text>
+
+  <!-- new tab button -->
+  <rect x="724" y="18" width="28" height="28" rx="7" fill="none" stroke="#3d4a63" stroke-width="1.5"/>
+  <path d="M738 25v14M731 32h14" stroke="#8f9bb0" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- terminal body: prompt lines showing how names come to be -->
+  <text x="36" y="118" font-size="19" fill="#5b667e">❯</text>
+  <text x="60" y="118" font-size="19" fill="#c8d2e2">pi 帮我调试 tty7 的标签同步</text>
+  <text x="36" y="156" font-size="19" fill="#5fd0a0">✓ 已命名会话：调试tty7标签同步</text>
+  <text x="348" y="156" font-size="17" fill="#4a5468">→ 写入 Tab 标题</text>
+
+  <text x="36" y="212" font-size="19" fill="#5b667e">❯</text>
+  <text x="60" y="212" font-size="19" fill="#c8d2e2">/name 重构用户服务</text>
+  <text x="36" y="250" font-size="19" fill="#5fd0a0">✓ 手动命名生效，自动命名不再覆盖</text>
+
+  <!-- cursor line -->
+  <text x="36" y="300" font-size="19" fill="#5b667e">❯</text>
+  <rect x="60" y="284" width="11" height="22" fill="#8f9bb0"/>
+</svg>

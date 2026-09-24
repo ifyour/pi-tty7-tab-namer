@@ -1,22 +1,19 @@
-# pi-tty7-tab-namer
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="tty7 Tab 栏中显示三个由 pi-tty7-tab-namer 自动命名的会话标签：调试tty7标签同步、重构用户服务、修复登录空白页">
+</p>
 
-**pi 扩展**：用大模型自动为会话命名，并把名字同步到 [tty7](https://github.com/l0ng-ai/tty7) 的 Tab 标题上。
+<h1 align="center">pi-tty7-tab-namer</h1>
 
-在 tty7 里开十个 pi 会话，每个 Tab 是什么任务一目了然——不需要点进去看。
+<p align="center">
+  <strong>pi 扩展</strong> · 用大模型自动为会话命名，同步到 <a href="https://github.com/l0ng-ai/tty7">tty7</a> 的 Tab 标题<br>
+  在 tty7 里开十个 pi 会话，每个 Tab 是什么任务一目了然——不需要点进去看
+</p>
 
-```
-Tab 1: 调试tty7标签同步    Tab 2: 重构用户服务    Tab 3: 修复登录空白页
-```
-
-## 特性
-
-- **自动命名**：会话第一条消息发出时，并行调用当前会话模型总结意图，生成 ≤10 字中文标题，不阻塞对话
-- **上下文感知**：载入一个从未命名的历史会话时，基于最近 10 条用户消息为**整个会话**命名，而不是只看追加的新消息
-- **双向同步**：在 tty7 里手动改 Tab 名，会同步写入 pi 会话名（等同 `/name`，同样拥有手动优先级）；本扩展的 OSC 标题写入不会触发反向事件，无回环
-- **手动优先**：`/name 自定义名字` 之后，自动命名永不覆盖
-- **全生命周期同步**：`new` / `resume` / `fork` / `quit` 时 Tab 标题跟随会话名字，退出后 Tab 回落到 tty7 默认
-- **竞态安全**：命名请求在途时切换/退出会话，结果会被丢弃，不会写错会话；模型调用带 20 秒超时，失败后下一轮自动重试
-- **零配置**：使用当前会话模型，无任何配置项
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/pi-package-5fd0a0" alt="pi package">
+  <img src="https://img.shields.io/badge/零配置-使用当前会话模型-8f9bb0" alt="零配置">
+</p>
 
 ## 安装
 
@@ -26,29 +23,26 @@ Tab 1: 调试tty7标签同步    Tab 2: 重构用户服务    Tab 3: 修复登�
 pi install git:github.com/ifyour/pi-tty7-tab-namer
 ```
 
-## 使用
+装好即可，无需任何操作。名字会同步写入会话元数据，`/resume` 会话列表里也直接可读。
 
-无需任何操作。装好后：
+## 使用场景
 
 | 场景 | 行为 |
 |---|---|
-| 新会话发出第一条消息 | 几秒内 Tab 自动显示标题 |
-| 载入未命名的历史会话 | 立即基于历史上下文命名 |
+| 新会话发出第一条消息 | 几秒内 Tab 自动显示 ≤10 字中文标题 |
+| 载入未命名的历史会话 | 基于最近 10 条消息为**整个会话**命名，而不只看追加的新消息 |
 | `/name 自定义` | Tab 立即更新，且之后自动命名不再生效 |
 | 在 tty7 里手动改 Tab 名 | 会话名立即同步为该名字，之后自动命名不再生效（等同 `/name`） |
 | resume 已命名会话 | Tab 立即显示该名字 |
 | 退出 pi | Tab 回落到 tty7 默认 |
 
-名字会同步写入会话元数据，`/resume` 会话列表里也直接可读。
+## 特性
 
-## 开发
-
-```bash
-git clone https://github.com/ifyour/pi-tty7-tab-namer
-cd pi-tty7-tab-namer
-npm test          # 标题清洗逻辑自检
-pi -e .           # 本地试用
-```
+- **自动命名**：第一条消息发出时，并行调用当前会话模型总结意图生成标题，不阻塞对话
+- **双向同步**：tty7 手动改 Tab 名 → 写入 pi 会话名；pi 内命名 → 更新 Tab。OSC 标题写入不触发反向事件，无回环
+- **手动优先**：`/name` 或 tty7 手动改名后，自动命名永不覆盖
+- **全生命周期跟随**：`new` / `resume` / `fork` / `quit` 时 Tab 标题跟随会话名字
+- **竞态安全**：命名请求在途时切换/退出会话，结果被丢弃，不会写错会话；20 秒超时，失败后下一轮自动重试
 
 ## FAQ
 
@@ -62,7 +56,16 @@ pi -e .           # 本地试用
 
 **模型调用花钱吗？**
 
-每次命名一个极小请求（约几百 token），仅未命名会话的首次触发时发生。
+每次命名一个极小请求（约几百 token），仅在未命名会话首次触发时发生。
+
+## 开发
+
+```bash
+git clone https://github.com/ifyour/pi-tty7-tab-namer
+cd pi-tty7-tab-namer
+npm test          # 标题清洗逻辑自检
+pi -e .           # 本地试用
+```
 
 ## License
 
