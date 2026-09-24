@@ -5,7 +5,7 @@ pi 扩展：用大模型自动为会话命名，并同步到 [tty7](https://gith
 ## 项目结构
 
 ```
-extensions/tty7-tab-name.ts   # 扩展本体（唯一源码文件，~200 行）
+extensions/tab-namer.ts   # 扩展本体（唯一源码文件，~200 行）
 test/sanitize.test.ts         # sanitizeTitle 自检（node:assert，无测试框架）
 package.json                  # pi 包清单（"pi": {"extensions": ["extensions/*.ts"]}）
 ```

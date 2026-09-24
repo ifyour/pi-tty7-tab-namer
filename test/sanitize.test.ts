@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { sanitizeTitle } from "../extensions/tty7-tab-name.ts";
+import { sanitizeTitle } from "../extensions/tab-namer.ts";
 
 const cases: Array<[string, string]> = [
 	["调试 tty7 标签同步功能", "调试 tty7 标签同步功能"],
