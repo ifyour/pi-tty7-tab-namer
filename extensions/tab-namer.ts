@@ -130,6 +130,12 @@ export default function (pi: ExtensionAPI) {
 					continue; // partial/malformed line
 				}
 				if (!renamed || typeof renamed.name !== "string") continue;
+				// Echo of our own forward sync → not user intent.
+				if (selfRename !== null && renamed.name === selfRename) {
+					selfRename = null;
+					continue;
+				}
+				selfRename = null;
 				// Lazy re-resolve: session may have moved to another tab (resume etc.).
 				if (ourTabId !== renamed.tab) {
 					ourTabId = resolveTabId();
@@ -139,6 +145,8 @@ export default function (pi: ExtensionAPI) {
 				if (!name) continue; // cleared/whitespace rename → ignore
 				if (pi.getSessionName() === name) continue; // no-op rename
 				manual = true; // user intent: auto-naming never overrides from here
+				tabNameOurs = false; // the user owns the tab name now
+				appliedTabName = name;
 				suppressInfo = true;
 				pi.setSessionName(name);
 				applyName(name);
@@ -162,13 +170,43 @@ export default function (pi: ExtensionAPI) {
 		}, 0);
 	}
 
+	let appliedTabName: string | null = null; // name currently on the tab's name field
+
+	// Forward sync: keep the tab's `name` field equal to the session name via
+	// `tab rename`. The OSC title only updates the tab's `label`, which the GUI
+	// hides once a user rename has set `name` (verified) — so session-side
+	// renames must go through the CLI to stay visible. tab rename accepts the
+	// tab UUID directly.
+	function tabRename(name: string) {
+		if (name === appliedTabName) return;
+		if (!ourTabId) ourTabId = resolveTabId();
+		if (!ourTabId) return;
+		appliedTabName = name;
+		tabNameOurs = true;
+		selfRename = name; // ignore the tab_renamed event this will echo back
+		try {
+			spawn(TTY7_EXE, ["tab", "rename", ourTabId, name], { stdio: "ignore" }).on("error", () => {});
+		} catch {}
+	}
+
 	function applyName(name: string | null) {
 		if (name) {
 			lastCustom = name;
 			setTitleSoon(name);
+			tabRename(name);
 		} else if (lastCustom !== null) {
 			lastCustom = null;
 			setTitleSoon("");
+			// Reset the tab name too — but only if we wrote it; a user-chosen
+			// tab name survives the session ("退出 pi → Tab 回落默认" only
+			// applies to names the extension set).
+			if (tabNameOurs && ourTabId) {
+				tabNameOurs = false;
+				appliedTabName = null;
+				try {
+					spawn(TTY7_EXE, ["tab", "rename", ourTabId, ""], { stdio: "ignore" }).on("error", () => {});
+				} catch {}
+			}
 		}
 	}
 
@@ -227,6 +265,15 @@ export default function (pi: ExtensionAPI) {
 		manual = false;
 		suppressInfo = false;
 		inFlight = false;
+		// Switching sessions: a tab name we wrote for the previous session no
+		// longer applies; clear it before the new session's name lands.
+		if (tabNameOurs && ourTabId) {
+			tabNameOurs = false;
+			appliedTabName = null;
+			try {
+				spawn(TTY7_EXE, ["tab", "rename", ourTabId, ""], { stdio: "ignore" }).on("error", () => {});
+			} catch {}
+		}
 		applyName(pi.getSessionName() ?? null);
 		startEvents(pi);
 		// Resumed a session that was never named → name it from its history now.
