@@ -88,6 +88,8 @@ export default function (pi: ExtensionAPI) {
 	let eventsProc: ChildProcess | null = null;
 	let ourTabId: string | null = null;
 	let eventsBuf = "";
+	let selfRename: string | null = null; // tab rename we issued ourselves (ignore the echoed event)
+	let tabNameOurs = false; // tab's name field was last written by this extension (not the user)
 
 	function resolveTabId(): string | null {
 		const pane = Number(process.env["TTY7_PANE"]);
