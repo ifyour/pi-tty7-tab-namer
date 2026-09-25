@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.3 - 2026-09-25
+
+### 修复
+
+- 主会话派发 subagent（pi-subagents，同进程 `createAgentSession`）时，子会话的自动名（如 `general-purpose#c897cd1c`）不再覆盖主会话的 Tab 标题与会话名：按子会话 `parentSession` 头部守卫 `session_start` / `before_agent_start` / `session_shutdown`，并在 `session_info_changed` 里按上下文与 `type#hex8` 名称模式双重过滤（不误置 manual，不影响后续自动命名）。
+- resume 曾被污染的会话时，已持久化的 subagent 错名不再显示（仍不改盘）。
+
+### 文档
+
+- AGENTS.md 新增第 12 条（子会话必须完全不激活）；README 增加子代理隔离特性说明。
+
 ## 0.0.2 - 2026-09-25
 
 ### 修复
