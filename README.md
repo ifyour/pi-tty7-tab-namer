@@ -11,7 +11,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/pi-package-5fd0a0" alt="pi package">
-  <img src="https://img.shields.io/badge/version-0.0.3-blue" alt="version">
+  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fifyour%2Fpi-tty7-tab-namer%2Fmain%2Fpackage.json&query=%24.version&label=version&color=blue" alt="version">
 </p>
 
 ## 安装
