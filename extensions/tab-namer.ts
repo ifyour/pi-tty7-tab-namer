@@ -31,6 +31,9 @@ const MAX_TOKENS = 512;
 const NAME_TIMEOUT_MS = 20_000;
 const HISTORY_MESSAGES = 10;
 const HISTORY_CHARS = 2000;
+// Subagent auto-name pattern (pi-subagents names child sessions "type#hex8",
+// e.g. "general-purpose#c897cd1c"); such names must never reach the tab.
+const SUBAGENT_NAME = /^[\w-]+#[0-9a-f]{8}$/i;
 // tty7 CLI resolves via PATH (installed at /usr/local/bin/tty7 by the app);
 // fall back to the app bundle binary for installs without the symlink.
 const TTY7_EXE = process.env["TTY7_CLI"] ?? "/usr/local/bin/tty7";
@@ -74,6 +77,18 @@ function historyUserMessages(ctx: ExtensionContext): string[] {
 
 export default function (pi: ExtensionAPI) {
 	if (!process.env["TTY7"]) return; // bridge convention: only inside tty7
+
+	// Subagent sessions (pi-subagents spawns them in-process via
+	// createAgentSession; they persist a parentSession header and share the same
+	// tab) must never touch the title, or the child's name (e.g.
+	// "general-purpose#c897cd1c") clobbers the main session's name.
+	const isSubagent = (ctx: ExtensionContext): boolean => {
+		try {
+			return Boolean(ctx.sessionManager.getHeader()?.parentSession);
+		} catch {
+			return false;
+		}
+	};
 
 	let gen = 0; // bumped on every session transition; in-flight naming must match
 	let manual = false; // a name arrived that we did not set
@@ -268,6 +283,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	pi.on("session_start", (event, ctx) => {
+		if (isSubagent(ctx)) return; // child agent process: the tab belongs to the main session
 		lastCtx = ctx;
 		gen++;
 		manual = false;
@@ -287,13 +303,21 @@ export default function (pi: ExtensionAPI) {
 				spawn(TTY7_EXE, ["tab", "rename", ourTabId, ""], { stdio: "ignore" }).on("error", () => {});
 			} catch {}
 		}
-		applyName(pi.getSessionName() ?? null);
+		const storedName = pi.getSessionName();
+		// A leaked subagent name ("type#hex8") may have been persisted into this
+		// session's file by pi-subagents; never display or trust it.
+		applyName(storedName && !SUBAGENT_NAME.test(storedName) ? storedName : null);
 		startEvents(pi);
 		// Resumed a session that was never named → name it from its history now.
 		if (event.reason === "resume" || event.reason === "fork") tryName(ctx);
 	});
 
-	pi.on("session_info_changed", (event) => {
+	pi.on("session_info_changed", (event, ctx) => {
+		// Subagents run in-process and setSessionName("type#hex8") on their child
+		// session; that event reaches us here and would clobber the main session's
+		// tab name (and flip manual=true, killing auto-naming). Ignore both the
+		// child-context delivery and the leaked name pattern itself.
+		if (isSubagent(ctx) || SUBAGENT_NAME.test(event.name ?? "")) return;
 		if (suppressInfo) {
 			suppressInfo = false;
 			return;
@@ -302,13 +326,15 @@ export default function (pi: ExtensionAPI) {
 		if (event.name) applyName(event.name);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", (event, ctx) => {
+		if (isSubagent(ctx)) return; // never touched the tab, nothing to reset
 		gen++;
 		stopEvents();
 		applyName(null);
 	});
 
 	pi.on("before_agent_start", (event, ctx) => {
+		if (isSubagent(ctx)) return;
 		// First prompt of an unnamed session, or a retry after a failed attempt.
 		tryName(ctx, event.prompt);
 	});

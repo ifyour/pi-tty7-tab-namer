@@ -32,6 +32,7 @@ package.json                  # pi 包清单（"pi": {"extensions": ["extensions
 9. **tty7 Tab 的 name 与 label 是两个字段**：OSC 标题只写 `label`；用户手动改 Tab 名写 `name`，且 **GUI 显示优先 `name`**（实测结论）。所以一旦 tab 有 name，仅靠 OSC 的内部命名会被遮蔽——内部命名（`/name`、自动命名、resume 已命名会话）必须同时调 `tty7 tab rename <tabUUID> <name>`（`tab rename` 支持 UUID 直连）。改名回空串 `""` 可清空 name 字段。
 10. **双向同步**：`tty7 events --json` 常驻子进程监听 `tab_renamed`（只在用户手动改名时发出；本扩展的 OSC 写入只产生 `pane_facts.osc_title`，不触发 rename 事件，故无回环）。pane→tab 映射用 `$TTY7_PANE` 反查 `tab ls --json`，事件 tab id 对不上时惰性重查。收到匹配改名 → `manual=true`（与 `/name` 同优先级）→ `setSessionName`。空名/同名 no-op。`session_shutdown` 杀子进程，进程崩溃静默、下次 session_start 重启。
 11. **双向同步的三个状态标志**（防止事件回声把自动命名误升为手动）：`selfRename` 标记自己发出的 rename，回声事件匹配后忽略；`appliedTabName` 缓存当前 tab name，同名不发冗余 rename；`tabNameOurs` 标记 tab name 是本扩展写的——只有它为 true 时，shutdown/切换会话才清空 tab name 回落默认（用户手改的名字永久保留）。例外：`session_start` reason === "new"（`/new`）视为完整新周期，tab name 一律清空回落默认，包括反向同步来的手动名。
+12. **子会话（subagent）必须完全不激活**：主会话派发的 subagent 是独立 pi 子进程，会继承 `TTY7`/`TTY7_PANE`，若不拦截会把子会话名（如 `general-purpose#c897cd1c`）写进主会话的 Tab。子会话 session 文件头部有 `parentSession` 字段（普通会话没有），用 `ctx.sessionManager.getHeader()?.parentSession` 检测；在 `session_start`/`before_agent_start`/`session_shutdown` 三个入口开头直接 return。注意 subagent 是**同进程**内跑的（pi-subagents `createAgentSession`），其 `session_info_changed`（子会话 `setSessionName("type#hex8")` 触发）也会到达本扩展，因此该 handler 里还要按 ctx 守卫 + 按 `SUBAGENT_NAME`（`^[\w-]+#[0-9a-f]{8}$`）模式忽略；这个错名甚至可能被持久写进主会话文件，session_start 显示已存名字时也要过滤。
 
 ## 命令
 
