@@ -11,7 +11,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/pi-package-5fd0a0" alt="pi package">
-  <img src="https://img.shields.io/badge/零配置-使用当前会话模型-8f9bb0" alt="零配置">
+  <img src="https://img.shields.io/badge/version-0.0.3-blue" alt="version">
 </p>
 
 ## 安装
