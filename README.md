@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="tty7 Tab 栏中显示三个由 pi-tty7-tab-namer 自动命名的会话标签：调试tty7标签同步、重构用户服务、修复登录空白页">
+  <img src="./assets/readme/hero.jpg" width="100%" alt="tty7 Tab 栏中显示多个由 pi-tty7-tab-namer 自动命名的会话标签">
 </p>
 
 <h1 align="center">pi-tty7-tab-namer</h1>
