@@ -17,6 +17,6 @@
 		"@earendil-works/pi-coding-agent": "*"
 	},
 	"scripts": {
-		"test": "node --experimental-strip-types test/sanitize.test.ts"
+		"test": "node --experimental-strip-types test/sanitize.test.ts && node test/e2e.mjs"
 	}
 }

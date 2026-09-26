@@ -1,0 +1,20 @@
+name: test
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pi
+        run: npm install -g @earendil-works/pi-coding-agent
+      - name: Unit tests
+        run: npm test
+      - name: E2E (fake tty7, no LLM)
+        run: node test/e2e.mjs
