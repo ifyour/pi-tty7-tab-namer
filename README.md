@@ -42,7 +42,7 @@ pi install git:github.com/ifyour/pi-tty7-tab-namer
 - **手动优先**：`/name` 或 tty7 手动改名后，自动命名永不覆盖
 - **全生命周期跟随**：`new` / `resume` / `fork` / `quit` 时 Tab 标题跟随会话名字
 - **竞态安全**：命名请求在途时切换/退出会话，结果被丢弃，不会写错会话；20 秒超时，失败后下一轮自动重试
-- **子代理隔离**：主会话派发 subagent（pi-subagents）时，子会话不会碰 Tab 标题或会话名，主会话命名不受影响
+- **子代理隔离**：主会话派发 subagent 时，子会话不会碰 Tab 标题或会话名，主会话命名不受影响（兼容所有基于 pi 子会话机制的 subagent，如 pi-subagents、内置 Task 工具）
 
 ## FAQ
 
