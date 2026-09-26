@@ -29,6 +29,8 @@ function run(extraArgs, logFile) {
 				TTY7_PANE: "116",
 				TTY7_CLI: join(ROOT, "test/fake-tty7.mjs"),
 				E2E_LOG: logFile,
+				// Satisfy pi's startup key check; no LLM call is needed by these cases.
+				GEMINI_API_KEY: "fake-key-for-startup-check",
 			},
 		},
 	);
