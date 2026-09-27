@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.4 - 2026-09-26
+
+### 修复
+
+- 修复 macOS 11 等老系统上安装失败：peerDependencies（仅类型用）改为 optional，`pi install` 不再自动安装它们及其依赖树（esbuild、@smithy 等），安装回到零依赖。esbuild 新版二进制为 macOS 12 编译，在老系统上缺 `_SecTrustCopyCertificateChain` 符号导致 `node install.js` 校验崩溃。
+
 ## 0.0.3 - 2026-09-25
 
 ### 修复

@@ -1,6 +1,6 @@
 {
 	"name": "pi-tty7-tab-namer",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "Auto-name pi sessions with an LLM and sync the name to the tty7 tab title. Manual /name always wins.",
 	"type": "module",
 	"files": ["extensions", "README.md"],
@@ -16,6 +16,10 @@
 	"peerDependencies": {
 		"@earendil-works/pi-agent-core": "*",
 		"@earendil-works/pi-coding-agent": "*"
+	},
+	"peerDependenciesMeta": {
+		"@earendil-works/pi-agent-core": { "optional": true },
+		"@earendil-works/pi-coding-agent": { "optional": true }
 	},
 	"scripts": {
 		"test": "node --experimental-strip-types test/sanitize.test.ts && node test/e2e.mjs"
