@@ -3,6 +3,7 @@
 	"version": "0.0.3",
 	"description": "Auto-name pi sessions with an LLM and sync the name to the tty7 tab title. Manual /name always wins.",
 	"type": "module",
+	"files": ["extensions", "README.md"],
 	"keywords": ["pi-package", "pi", "tty7", "terminal", "tab-title", "session-name"],
 	"license": "MIT",
 	"repository": {
