@@ -51,7 +51,7 @@ async function run(extraArgs, logFile) {
 		const child = spawn(
 			"pi",
 			[
-				"-e", join(ROOT, "extensions/tab-namer.ts"),
+				"-e", join(ROOT, "extensions/index.ts"),
 				"-p", "--no-session", "--no-extensions",
 				"--provider", "openai", "--model", MODEL_ID,
 				...extraArgs,
