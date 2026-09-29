@@ -24,11 +24,28 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { appendFile, stat, truncate } from "node:fs/promises";
+
+// Lightweight always-on trace log: one JSON line per naming decision, so a
+// silent failure (timeout/model error/gen race/manual override) can be
+// diagnosed after the fact. Truncated at ~256 KB to stay bounded.
+const LOG_PATH = `${process.env["HOME"] ?? ""}/.pi/agent/tty7-tab-namer.log`;
+const LOG_MAX_BYTES = 256 * 1024;
+function log(event: string, detail: Record<string, unknown> = {}) {
+	void (async () => {
+		try {
+			const s = await stat(LOG_PATH).catch(() => null);
+			if (s && s.size > LOG_MAX_BYTES) await truncate(LOG_PATH);
+			await appendFile(LOG_PATH, JSON.stringify({ t: new Date().toISOString(), event, ...detail }) + "\n");
+		} catch {}
+	})();
+}
 
 const NAME_PROMPT =
 	"根据下面的用户消息记录，为这个会话起一个简短标题：不超过10个字，概括整个会话的主要意图，中文，不加引号、句号或任何前后缀，直接输出标题本身。\n\n<user-messages>\n";
 const MAX_TOKENS = 512;
 const NAME_TIMEOUT_MS = 20_000;
+const NAME_RETRIES = 3; // total attempts; backoff 2s → 4s between retries
 const HISTORY_MESSAGES = 10;
 const HISTORY_CHARS = 2000;
 // Subagent auto-name pattern (pi-subagents names child sessions "type#hex8",
@@ -94,6 +111,7 @@ export default function (pi: ExtensionAPI) {
 	let manual = false; // a name arrived that we did not set
 	let suppressInfo = false; // the next session_info_changed is our own setSessionName
 	let inFlight = false;
+	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastCustom: string | null = null; // title we manage; null = leave terminal default
 
 	// --- reverse sync: tty7 tab rename → session name -----------------------
@@ -166,6 +184,7 @@ export default function (pi: ExtensionAPI) {
 				if (!name) continue; // cleared/whitespace rename → ignore
 				if (pi.getSessionName() === name) continue; // no-op rename
 				manual = true; // user intent: auto-naming never overrides from here
+				log("reverse-sync", { name });
 				tabNameOurs = false; // the user owns the tab name now
 				appliedTabName = name;
 				suppressInfo = true;
@@ -233,52 +252,91 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function tryName(ctx: ExtensionContext, latestPrompt?: string) {
-		if (manual || pi.getSessionName() || inFlight || !ctx.model) return;
+		const skip = (why: string) => log("skip", { why, prompt: Boolean(latestPrompt), sessionId: ctx.sessionManager.getSessionId() });
+		if (manual) return skip("manual");
+		if (pi.getSessionName()) return skip("already-named");
+		if (inFlight) return skip("in-flight");
+		if (!ctx.model) return skip("no-model");
 		const messages = historyUserMessages(ctx);
 		if (latestPrompt) messages.push(latestPrompt);
-		if (messages.length === 0) return;
+		if (messages.length === 0) return skip("no-messages");
 		let context = messages.join("\n---\n");
 		if (context.length > HISTORY_CHARS) context = context.slice(-HISTORY_CHARS);
 		const myGen = gen;
 		const model = ctx.model;
 		inFlight = true;
-		// Fire-and-forget: naming must not delay the user's turn.
+		log("naming-start", { context: context.slice(-200), sessionId: ctx.sessionManager.getSessionId() });
+		// Fire-and-forget: naming must not delay the user's turn. On failure
+		// retry up to NAME_RETRIES attempts total with exponential backoff, so a
+		// flaky first call still names the session within seconds.
 		void (async () => {
-			let name = "";
-			try {
-				const request = ctx.modelRegistry.complete(
-					model,
-					{
-						messages: [
-							{
-								role: "user" as const,
-								content: [{ type: "text" as const, text: `${NAME_PROMPT}${context}\n</user-messages>` }],
-								timestamp: Date.now(),
-							},
-						],
-					},
-					{ maxTokens: MAX_TOKENS, cacheRetention: "none", sessionId: crypto.randomUUID() },
-				);
-				const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), NAME_TIMEOUT_MS));
-				const response = await Promise.race([request, timeout]);
-				if (!response) return; // timed out; next turn retries
-				const text = response.content
-					.filter((c): c is { type: "text"; text: string } => c.type === "text")
-					.map((c) => c.text)
-					.join(" ");
-				name = sanitizeTitle(text);
-			} catch {
-				// Silent: next turn retries automatically.
-				return;
-			} finally {
-				inFlight = false;
+			for (let attempt = 1; attempt <= NAME_RETRIES; attempt++) {
+				let name = "";
+				try {
+					const request = ctx.modelRegistry.complete(
+						model,
+						{
+							messages: [
+								{
+									role: "user" as const,
+									content: [{ type: "text" as const, text: `${NAME_PROMPT}${context}\n</user-messages>` }],
+									timestamp: Date.now(),
+								},
+							],
+						},
+						{ maxTokens: MAX_TOKENS, cacheRetention: "none", sessionId: crypto.randomUUID() },
+					);
+					const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), NAME_TIMEOUT_MS));
+					const response = await Promise.race([request, timeout]);
+					if (!response) {
+						log("naming-failed", { why: "timeout", attempt, ms: NAME_TIMEOUT_MS });
+					} else {
+						const text = response.content
+							.filter((c): c is { type: "text"; text: string } => c.type === "text")
+							.map((c) => c.text)
+							.join(" ");
+						name = sanitizeTitle(text);
+						if (!name) log("naming-failed", { why: "empty-after-sanitize", attempt, raw: text.slice(0, 100) });
+					}
+				} catch (err) {
+					log("naming-failed", { why: "error", attempt, error: err instanceof Error ? err.message : String(err) });
+				}
+				if (name) {
+					// On a gen change session_start already reset inFlight for the new
+					// session — leave it alone.
+					if (myGen !== gen) return log("naming-dropped", { why: "gen-changed" });
+					inFlight = false;
+					if (manual) return log("naming-dropped", { why: "manual" });
+					if (pi.getSessionName()) return log("naming-dropped", { why: "already-named" });
+					log("naming-done", { name, attempt });
+					suppressInfo = true;
+					pi.setSessionName(name);
+					applyName(name);
+					return;
+				}
+				if (attempt < NAME_RETRIES) {
+					const backoff = 2 ** attempt * 1000; // 2s, 4s
+					let aborted: "gen" | null = null;
+					const iv = setInterval(() => {
+						// Session switched away or user named it: stop retrying.
+						if (myGen !== gen || manual) aborted = "gen";
+					}, 250);
+					await new Promise((resolve) => {
+						retryTimer = setTimeout(() => {
+							clearInterval(iv);
+							resolve(null);
+						}, backoff);
+					});
+					clearInterval(iv);
+					if (aborted || manual) {
+						inFlight = false;
+						return log("naming-dropped", { why: manual ? "manual" : "gen-changed" });
+					}
+					log("naming-retry", { attempt: attempt + 1, backoffMs: backoff });
+				}
 			}
-			// Session may have been switched/quit while the request was in flight,
-			// or the user may have named it manually meanwhile.
-			if (!name || myGen !== gen || manual || pi.getSessionName()) return;
-			suppressInfo = true;
-			pi.setSessionName(name);
-			applyName(name);
+			if (myGen === gen) inFlight = false;
+			log("naming-failed", { why: "exhausted", attempts: NAME_RETRIES });
 		})();
 	}
 
@@ -289,6 +347,10 @@ export default function (pi: ExtensionAPI) {
 		manual = false;
 		suppressInfo = false;
 		inFlight = false;
+		if (retryTimer) {
+			clearTimeout(retryTimer); // kill any pending backoff from the old session
+			retryTimer = null;
+		}
 		// /new is a full new cycle: the tab always falls back to the default, even
 		// when the current name came from a manual tty7 rename (reverse sync).
 		if (event.reason === "new" && appliedTabName) {
@@ -309,7 +371,10 @@ export default function (pi: ExtensionAPI) {
 		applyName(storedName && !SUBAGENT_NAME.test(storedName) ? storedName : null);
 		startEvents(pi);
 		// Resumed a session that was never named → name it from its history now.
-		if (event.reason === "resume" || event.reason === "fork") tryName(ctx);
+		if (event.reason === "resume" || event.reason === "fork") {
+			log("trigger", { reason: event.reason });
+			tryName(ctx);
+		}
 	});
 
 	pi.on("session_info_changed", (event, ctx) => {
@@ -336,6 +401,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event, ctx) => {
 		if (isSubagent(ctx)) return;
 		// First prompt of an unnamed session, or a retry after a failed attempt.
+		log("trigger", { reason: "before-agent-start" });
 		tryName(ctx, event.prompt);
 	});
 }
