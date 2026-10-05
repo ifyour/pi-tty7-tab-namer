@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-10-05
+
+### 文档
+
+- README：安装命令改为 npm 为主（`pi install npm:pi-tty7-tab-namer`），npm 徽标链接到 npm 包页，pi-package 徽标链接到 pi.dev 包收录页。
+
 ## 0.1.0 - 2026-09-29
 
 ### 新功能

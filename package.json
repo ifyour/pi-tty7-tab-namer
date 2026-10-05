@@ -1,25 +1,41 @@
 {
 	"name": "pi-tty7-tab-namer",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Auto-name pi sessions with an LLM and sync the name to the tty7 tab title. Manual /name always wins.",
 	"type": "module",
-	"files": ["extensions", "README.md"],
-	"keywords": ["pi-package", "pi", "tty7", "terminal", "tab-title", "session-name"],
+	"files": [
+		"extensions",
+		"README.md"
+	],
+	"keywords": [
+		"pi-package",
+		"pi",
+		"tty7",
+		"terminal",
+		"tab-title",
+		"session-name"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ifyour/pi-tty7-tab-namer.git"
 	},
 	"pi": {
-		"extensions": ["extensions/*.ts"]
+		"extensions": [
+			"extensions/*.ts"
+		]
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-agent-core": "*",
 		"@earendil-works/pi-coding-agent": "*"
 	},
 	"peerDependenciesMeta": {
-		"@earendil-works/pi-agent-core": { "optional": true },
-		"@earendil-works/pi-coding-agent": { "optional": true }
+		"@earendil-works/pi-agent-core": {
+			"optional": true
+		},
+		"@earendil-works/pi-coding-agent": {
+			"optional": true
+		}
 	},
 	"scripts": {
 		"test": "node --experimental-strip-types test/sanitize.test.ts && node test/e2e.mjs"
