@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write # OIDC for npm trusted publishing
+      contents: write # create GitHub Release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
