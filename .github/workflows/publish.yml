@@ -19,3 +19,13 @@ jobs:
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: unused # trusted publishing uses OIDC, not a token
+      - name: Extract changelog for this version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v ver="$VERSION" '/^## /{p=0} $0 ~ "^## ?"ver" "{p=1} p' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || { echo "No changelog section for $VERSION" >&2; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: release-notes.md
