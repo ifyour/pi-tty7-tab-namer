@@ -26,8 +26,6 @@
 pi install npm:pi-tty7-tab-namer
 ```
 
-或从 git 安装：
-
 装好即可，无需任何操作。名字会同步写入会话元数据，`/resume` 会话列表里也直接可读。
 
 ## 使用场景

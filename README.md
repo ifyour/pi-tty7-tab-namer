@@ -26,8 +26,6 @@ Prerequisite: run pi inside the [tty7](https://github.com/l0ng-ai/tty7) terminal
 pi install npm:pi-tty7-tab-namer
 ```
 
-Or from git:
-
 That's it — nothing else to do. Names are also written to session metadata, so they show up readable in the `/resume` session list.
 
 ## Usage
