@@ -54,8 +54,26 @@ pi list         # 确认扩展已加载
 
 ## 当前状态
 
-- v0.0.1 已发布：GitHub https://github.com/ifyour/pi-tty7-tab-namer（tag + Release 已建）
-- 分发方式：git 包（`pi install git:github.com/ifyour/pi-tty7-tab-namer`），纯 TS 源码、无构建产物；npm 发布（可选）只需加 `"files": ["extensions", "README.md"]` 后 `npm publish`
+- v0.1.0 已发布：npm（`pi install npm:pi-tty7-tab-namer`）+ GitHub https://github.com/ifyour/pi-tty7-tab-namer（tag + Release 已建）
+- 分发：纯 TS 源码、无构建产物；`files: ["extensions", "README.md"]`，npm 自动附带 LICENSE / package.json
+
+## 发布流程（npm）
+
+1. 确认 registry：官方源 `https://registry.npmjs.org/`（`npm config get registry`）。镜像源 npmmirror 只用于拉包，**发布必须走官方源**
+2. 改 `package.json` 的 version（同步 CHANGELOG）
+3. `npm test` 通过，`npm pack --dry-run` 检查 tarball 内容
+4. 发布：`npm publish --access public --auth-type=web`
+   - 账号 2FA 是 **passkey**（Touch ID），CLI 用 `--auth-type=web` 走浏览器授权，**不是** `--otp`
+   - 若报 E401/未登录：先 `npm login --auth-type=web`
+   - 发布后验证：`npm view pi-tty7-tab-namer version`
+5. GitHub 打 tag + Release，同步更新 README 安装命令
+
+### 2FA 注意事项（2025-11 后的 npm 政策）
+
+- 发布强制要求 2FA（passkey 或带 bypass-2FA 的 granular token）
+- 新绑定 2FA 只支持 passkey/安全密钥，**TOTP（认证器扫码）已停止新增**
+- passkey 模式下 CLI 发布/登录都走 `--auth-type=web` 浏览器弹窗授权
+- npm 官方源登录凭据与镜像源互不相通；全局切源用 `npm config set registry`
 
 ## 风格
 
