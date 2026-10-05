@@ -57,16 +57,15 @@ pi list         # 确认扩展已加载
 - v0.1.0 已发布：npm（`pi install npm:pi-tty7-tab-namer`）+ GitHub https://github.com/ifyour/pi-tty7-tab-namer（tag + Release 已建）
 - 分发：纯 TS 源码、无构建产物；`files: ["extensions", "README.md"]`，npm 自动附带 LICENSE / package.json
 
-## 发布流程（npm）
+## 发布流程（npm，自动发布）
 
-1. 确认 registry：官方源 `https://registry.npmjs.org/`（`npm config get registry`）。镜像源 npmmirror 只用于拉包，**发布必须走官方源**
-2. 改 `package.json` 的 version（同步 CHANGELOG）
-3. `npm test` 通过，`npm pack --dry-run` 检查 tarball 内容
-4. 发布：`npm publish --access public --auth-type=web`
-   - 账号 2FA 是 **passkey**（Touch ID），CLI 用 `--auth-type=web` 走浏览器授权，**不是** `--otp`
-   - 若报 E401/未登录：先 `npm login --auth-type=web`
-   - 发布后验证：`npm view pi-tty7-tab-namer version`
-5. GitHub 打 tag + Release，同步更新 README 安装命令
+1. 改 `package.json` 版本（`npm version patch|minor|major` 会自动 commit）+ 同步 CHANGELOG
+2. `npm test` 通过
+3. `git push --follow-tags` → GitHub Actions（`.github/workflows/publish.yml`）自动跑测试并发布到 npm
+   - 走 npm **Trusted Publishing（OIDC）**，无需登录/token/OTP；发布身份绑定在 npm 包 Settings 的 Trusted Publisher 配置（ifyour/pi-tty7-tab-namer + publish.yml）
+   - tag 版本必须与 package.json 版本一致，否则 OIDC 发布会被拒
+   - 手动发布的备用命令：`npm publish --access public --auth-type=web`（passkey 走浏览器授权，不是 `--otp`）
+4. 验证：`npm view pi-tty7-tab-namer version`；GitHub Release 手动建或后续加到 workflow
 
 ### 2FA 注意事项（2025-11 后的 npm 政策）
 
