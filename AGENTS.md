@@ -54,7 +54,7 @@ pi list         # 确认扩展已加载
 
 ## 当前状态
 
-- v0.1.0 已发布：npm（`pi install npm:pi-tty7-tab-namer`）+ GitHub https://github.com/ifyour/pi-tty7-tab-namer（tag + Release 已建）
+- v0.1.2 已发布：npm（OIDC 自动发布已打通）+ GitHub Release。修复 Homebrew 环境（`/opt/homebrew/bin/tty7`）启动即崩溃（events spawn 缺 error handler → uncaughtException）+ CLI 路径自动解析（issue #1）。
 - 分发：纯 TS 源码、无构建产物；`files: ["extensions", "README.md"]`，npm 自动附带 LICENSE / package.json
 
 ## 发布流程（npm，自动发布）
@@ -65,12 +65,14 @@ pi list         # 确认扩展已加载
    - 走 npm **Trusted Publishing（OIDC）**，无需登录/token/OTP；发布身份绑定在 npm 包 Settings 的 Trusted Publisher 配置（ifyour/pi-tty7-tab-namer + publish.yml）
    - tag 版本必须与 package.json 版本一致，否则 OIDC 发布会被拒
    - 手动发布的备用命令：`npm publish --access public --auth-type=web`（passkey 走浏览器授权，不是 `--otp`）
-4. 验证：`npm view pi-tty7-tab-namer version`；GitHub Release 手动建或后续加到 workflow
+4. 验证：`npm view pi-tty7-tab-namer version`（发布后 registry 传播有几分钟延迟）；GitHub Release 由 workflow 自动创建
 
-### 发布流水线已知问题（2026-10）
+### 发布流水线避坑（2026-10 实战打通）
 
-- publish.yml 从未成功跑过：e2e 测试需要全局安装 pi（已修）；OIDC 需要 npm ≥ 11.5.1，Node 22 自带 10.x（已修，workflow 内升级 npm）；去掉假的 `NODE_AUTH_TOKEN: unused`。
-- **仍阻塞**：npm 侧 Trusted Publisher 配置疑似与 workflow 不匹配（registry 返回 E404 掩盖未授权，误导性很强）。需人工登录 npmjs.com → 包 Settings → Trusted Publishers 核对：仓库 `ifyour/pi-tty7-tab-namer`、workflow 文件名 `publish.yml`、environment 留空（或在 workflow 里声明同名 environment）。修好后 `git tag -f v<版本> && git push -f origin v<版本>` 重跑。
+- publish.yml 的坑都已修：e2e 需要（workflow 里 `npm install -g @earendil-works/pi-coding-agent`）；OIDC 需要 npm ≥ 11.5.1（workflow 里 `npm install -g npm@latest`）；不要设 `NODE_AUTH_TOKEN`（假值也会干扰 OIDC）。
+- **npm 侧 Trusted Publisher 配置**：仓库 `ifyour/pi-tty7-tab-namer` + workflow `publish.yml` + environment 留空 + **Allowed actions 必须勾 `npm publish`**（2026-09-03 后新建的配置默认只勾 `npm stage publish`，报 `403 OIDC permission denied`）。配置会过期（Expired），重建时注意这个默认值；新建后需在截止时间前发布一次完成验证（Pending validation）。
+- 错误对照：E404 = 配置不存在/不匹配（误导性错误，实为未授权）；E403 OIDC permission denied = Allowed actions 没勾 `npm publish`。
+- tag 内容不变要重跑时：`gh run rerun <id> --repo ...`（重推同 hash 的 tag GitHub 不会触发新 run）。
 - 人工发布备用：`npm publish --access public --auth-type=web`。
 - 推送 `.github/workflows/**` 改动时，gh 的 OAuth token 缺 `workflow` scope 会被拒；用 SSH remote 推送（`git push git@github.com:ifyour/pi-tty7-tab-namer.git`）可绕开。
 
