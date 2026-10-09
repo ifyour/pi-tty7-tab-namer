@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org/
+      - name: Install pi # e2e test (npm test) spawns it
+        run: npm install -g @earendil-works/pi-coding-agent
       - run: npm test
       - run: npm publish --access public
         env:
