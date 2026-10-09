@@ -67,6 +67,13 @@ pi list         # 确认扩展已加载
    - 手动发布的备用命令：`npm publish --access public --auth-type=web`（passkey 走浏览器授权，不是 `--otp`）
 4. 验证：`npm view pi-tty7-tab-namer version`；GitHub Release 手动建或后续加到 workflow
 
+### 发布流水线已知问题（2026-10）
+
+- publish.yml 从未成功跑过：e2e 测试需要全局安装 pi（已修）；OIDC 需要 npm ≥ 11.5.1，Node 22 自带 10.x（已修，workflow 内升级 npm）；去掉假的 `NODE_AUTH_TOKEN: unused`。
+- **仍阻塞**：npm 侧 Trusted Publisher 配置疑似与 workflow 不匹配（registry 返回 E404 掩盖未授权，误导性很强）。需人工登录 npmjs.com → 包 Settings → Trusted Publishers 核对：仓库 `ifyour/pi-tty7-tab-namer`、workflow 文件名 `publish.yml`、environment 留空（或在 workflow 里声明同名 environment）。修好后 `git tag -f v<版本> && git push -f origin v<版本>` 重跑。
+- 人工发布备用：`npm publish --access public --auth-type=web`。
+- 推送 `.github/workflows/**` 改动时，gh 的 OAuth token 缺 `workflow` scope 会被拒；用 SSH remote 推送（`git push git@github.com:ifyour/pi-tty7-tab-namer.git`）可绕开。
+
 ### 2FA 注意事项（2025-11 后的 npm 政策）
 
 - 发布强制要求 2FA（passkey 或带 bypass-2FA 的 granular token）
