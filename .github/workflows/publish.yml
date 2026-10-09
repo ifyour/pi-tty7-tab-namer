@@ -18,10 +18,10 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - name: Install pi # e2e test (npm test) spawns it
         run: npm install -g @earendil-works/pi-coding-agent
+      - name: Upgrade npm # trusted publishing (OIDC) requires npm >= 11.5.1; Node 22 ships 10.x
+        run: npm install -g npm@latest
       - run: npm test
       - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: unused # trusted publishing uses OIDC, not a token
       - name: Extract changelog for this version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
