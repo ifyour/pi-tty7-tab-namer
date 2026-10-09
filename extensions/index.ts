@@ -24,6 +24,7 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { appendFile, stat, truncate } from "node:fs/promises";
 
 // Lightweight always-on trace log: one JSON line per naming decision, so a
@@ -51,9 +52,18 @@ const HISTORY_CHARS = 2000;
 // Subagent auto-name pattern (pi-subagents names child sessions "type#hex8",
 // e.g. "general-purpose#c897cd1c"); such names must never reach the tab.
 const SUBAGENT_NAME = /^[\w-]+#[0-9a-f]{8}$/i;
-// tty7 CLI resolves via PATH (installed at /usr/local/bin/tty7 by the app);
-// fall back to the app bundle binary for installs without the symlink.
-const TTY7_EXE = process.env["TTY7_CLI"] ?? "/usr/local/bin/tty7";
+// Resolve the tty7 CLI: explicit override first, then known install paths
+// (/usr/local/bin symlink, Homebrew on Apple Silicon, app bundle), else bare
+// "tty7" so spawn falls back to PATH.
+function resolveTty7Exe(): string {
+	const override = process.env["TTY7_CLI"];
+	if (override) return override;
+	for (const p of ["/opt/homebrew/bin/tty7", "/usr/local/bin/tty7", "/Applications/tty7.app/Contents/MacOS/tty7"]) {
+		if (existsSync(p)) return p;
+	}
+	return "tty7";
+}
+const TTY7_EXE = resolveTty7Exe();
 
 /** Extract a clean title from raw model output. Exported for the self-test. */
 export function sanitizeTitle(raw: string): string {
@@ -154,6 +164,11 @@ export default function (pi: ExtensionAPI) {
 		} catch {
 			return; // silent: reverse sync is best-effort
 		}
+		// ENOENT (binary not found) is emitted asynchronously, not thrown — without
+		// this handler it becomes an uncaughtException that kills pi on startup.
+		eventsProc.on("error", () => {
+			eventsProc = null;
+		});
 		eventsProc.stdout!.on("data", (chunk: Buffer) => {
 			eventsBuf += chunk.toString();
 			let nl: number;
