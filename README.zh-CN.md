@@ -12,6 +12,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <a href="https://pi.dev/packages/pi-tty7-tab-namer"><img src="https://img.shields.io/badge/pi-package-5fd0a0" alt="pi package"></a>
   <a href="https://www.npmjs.com/package/pi-tty7-tab-namer"><img src="https://img.shields.io/npm/v/pi-tty7-tab-namer?color=blue" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/pi-tty7-tab-namer"><img src="https://img.shields.io/npm/dm/pi-tty7-tab-namer?color=blue" alt="npm downloads"></a>
 </p>
 
 <p align="center">
