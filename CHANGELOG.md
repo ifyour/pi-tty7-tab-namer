@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-10-06
+
+### 修复
+
+- 修复 Homebrew 环境下 pi 启动即崩溃（uncaughtException）的问题：`tty7 events` 的 spawn 是唯一没有 `error` handler 的启动点，二进制不存在时 ENOENT 异步抛出导致整个进程退出（[#1](https://github.com/ifyour/pi-tty7-tab-namer/issues/1)）。
+- tty7 CLI 路径解析：`TTY7_CLI` 覆盖 → `/opt/homebrew/bin`（Homebrew Apple Silicon）→ `/usr/local/bin` → app bundle → PATH，Homebrew 安装开箱即用。
+
 ## 0.1.1 - 2026-10-05
 
 ### 文档
