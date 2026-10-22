@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3 - 2026-10-22
+
+### 修复
+
+- 修复会话替换（`/new`、`/resume`、`/fork`、reload）时 pi 崩溃的问题：`tty7 events` 监听子进程的 stdout 回调捕获了扩展闭包的 `pi`，pi 在会话替换后使旧实例失效，`kill()` 后仍在管道中的残留事件到达回调时触发 `assertActive` 抛错——裸 socket 回调无法被 pi 捕获，直接 uncaughtException 杀死整个进程。现在 `stopEvents()` 先摘除全部监听再 kill，并为 `kill()` 本身补上 error 守卫与 SIGKILL 兑底。
+- 反向同步回调尾段加 try/catch 兑底：任何失效路径只记 `reverse-sync-error` 日志，不再可能崩溃 pi。
+- 命名异步续体加跨运行守卫：会话替换后旧运行的命名结果直接丢弃（`naming-dropped: session-changed`），绝不触碰已失效的 `pi`；模块级单飞锁避免同一会话并发命名。
+
+### 其他
+
+- `before_agent_start` 的 `event.prompt` 类型收窄（custom-message 触发的回合无该字段）。
+- 诊断日志新增 `session-start` 事件及 `instance`/`ordinal` 字段，便于排查多运行并发。
+
 ## 0.1.2 - 2026-10-06
 
 ### 修复
