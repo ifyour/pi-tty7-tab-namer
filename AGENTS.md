@@ -27,13 +27,14 @@ package.json                  # pi 包清单（"pi": {"extensions": ["extensions
 4. **手动命名判定**：`session_info_changed` 里 `event.name !== undefined` 即视为手动（用 `suppressInfo` 标志排除自己 set 触发的那次）。一旦 manual=true，自动命名对当前会话永久失效。
 5. **上下文命名**：resume/fork 一个从未命名的会话时，取**最近 10 条用户消息**（`HISTORY_MESSAGES`，截断 2000 字符）为整个会话命名，不能只看追加的那条新消息——这是用户验证过的用例。
 6. **失败重试 + 指数退避**：模型调用 20s 超时或出错时最多尝试 3 次（退避 2s、4s），等待期间会话切换或手动命名立即中止。仍失败则静默等下一轮。不弹通知。
-7. **诊断日志**：命名全链路决策写入 `~/.pi/agent/tty7-tab-namer.log`（每行 JSON，超 256KB 自动清空）：trigger / skip / naming-start / naming-failed（timeout/error/empty-after-sanitize/exhausted，带 attempt）/ naming-retry / naming-dropped / naming-done / reverse-sync。排查“第一次消息没出名字”先看这个文件。
+7. **诊断日志**：命名全链路决策写入 `~/.pi/agent/tty7-tab-namer.log`（每行 JSON，超 256KB 自动清空）：trigger / skip / naming-start / naming-failed（timeout/error/empty-after-sanitize/exhausted，带 attempt）/ naming-retry / naming-dropped / naming-done / reverse-sync / session-start（带 `instance`/`ordinal`）。排查“第一次消息没出名字”先看这个文件；排查重复/并发类问题先看 `instance` 字段是否只有一个实例——多实例互不可见锁，双加载（如 `pi -e .` 叠加全局安装版）会表现为同一毫秒两条 naming-start。
 8. **session_shutdown** 时 `applyName(null)` 重置标题，Tab 回落 tty7 默认。
 9. 标题模型输出必须过 `sanitizeTitle()`：取首个非空行、去引号/书名号/尾标点、截断 20 字符。
 10. **tty7 Tab 的 name 与 label 是两个字段**：OSC 标题只写 `label`；用户手动改 Tab 名写 `name`，且 **GUI 显示优先 `name`**（实测结论）。所以一旦 tab 有 name，仅靠 OSC 的内部命名会被遮蔽——内部命名（`/name`、自动命名、resume 已命名会话）必须同时调 `tty7 tab rename <tabUUID> <name>`（`tab rename` 支持 UUID 直连）。改名回空串 `""` 可清空 name 字段。
 11. **双向同步**：`tty7 events --json` 常驻子进程监听 `tab_renamed`（只在用户手动改名时发出；本扩展的 OSC 写入只产生 `pane_facts.osc_title`，不触发 rename 事件，故无回环）。pane→tab 映射用 `$TTY7_PANE` 反查 `tab ls --json`，事件 tab id 对不上时惰性重查。收到匹配改名 → `manual=true`（与 `/name` 同优先级）→ `setSessionName`。空名/同名 no-op。`session_shutdown` 杀子进程，进程崩溃静默、下次 session_start 重启。
 12. **双向同步的三个状态标志**（防止事件回声把自动命名误升为手动）：`selfRename` 标记自己发出的 rename，回声事件匹配后忽略；`appliedTabName` 缓存当前 tab name，同名不发冗余 rename；`tabNameOurs` 标记 tab name 是本扩展写的——只有它为 true 时，shutdown/切换会话才清空 tab name 回落默认（用户手改的名字永久保留）。例外：`session_start` reason === "new"（`/new`）视为完整新周期，tab name 一律清空回落默认，包括反向同步来的手动名。
 13. **子会话（subagent）必须完全不激活**：主会话派发的 subagent 是独立 pi 子进程，会继承 `TTY7`/`TTY7_PANE`，若不拦截会把子会话名（如 `general-purpose#c897cd1c`）写进主会话的 Tab。子会话 session 文件头部有 `parentSession` 字段（普通会话没有），用 `ctx.sessionManager.getHeader()?.parentSession` 检测；在 `session_start`/`before_agent_start`/`session_shutdown` 三个入口开头直接 return。注意 subagent 是**同进程**内跑的（pi-subagents `createAgentSession`），其 `session_info_changed`（子会话 `setSessionName("type#hex8")` 触发）也会到达本扩展，因此该 handler 里还要按 ctx 守卫 + 按 `SUBAGENT_NAME`（`^[\w-]+#[0-9a-f]{8}$`）模式忽略；这个错名甚至可能被持久写进主会话文件，session_start 显示已存名字时也要过滤。
+14. **会话替换使旧扩展实例失效**：pi 在 `/new`、`/resume`、`/fork`、reload 时先发 `session_shutdown` 再 invalidate 旧 ExtensionRunner 并重建。任何捕获了 `pi` 的异步续体（子进程回调、定时器、await 之后的代码）都可能拿到已失效实例，`assertActive` 从裸 socket 回调抛出即 uncaughtException 杀死整个 pi（pi 无法捕获非 handler 异常）。对策：拆子进程监听器先 `removeAllListeners()` 再 `kill()`（in-flight 残留数据不再进 handler）；跨运行守卫用模块级 `closureOrdinal`/`activeOrdinal`（session_start 单调认领 `Math.max`，无论派发顺序如何最新者必胜）+ `namingSessionId` 单飞锁（`.finally` 兑底释放）；任何碰 `pi.*` 的异步尾段包 try/catch 只记日志。
 
 ## 命令
 
@@ -54,7 +55,7 @@ pi list         # 确认扩展已加载
 
 ## 当前状态
 
-- v0.1.2 已发布：npm（OIDC 自动发布已打通）+ GitHub Release。修复 Homebrew 环境（`/opt/homebrew/bin/tty7`）启动即崩溃（events spawn 缺 error handler → uncaughtException）+ CLI 路径自动解析（issue #1）。
+- v0.1.3 已发布（2026-10-22）：修复会话替换（`/new`、`/resume`、`/fork`、reload）时 pi uncaughtException 崩溃——events 子进程回调在实例失效后仍被残留数据触发；另含反向同步兑底、跨运行命名守卫、`event.prompt` 类型收窄。npm + GitHub Release，OIDC 流程畅通。
 - 分发：纯 TS 源码、无构建产物；`files: ["extensions", "README.md"]`，npm 自动附带 LICENSE / package.json
 
 ## 发布流程（npm，自动发布）
@@ -68,6 +69,8 @@ pi list         # 确认扩展已加载
 4. 验证：`npm view pi-tty7-tab-namer version`（发布后 registry 传播有几分钟延迟）；GitHub Release 由 workflow 自动创建
 
 ### 发布流水线避坑（2026-10 实战打通）
+
+- **tag-after-amend**：`npm version` 打的 tag 指向当时的 commit，之后若 `git commit --amend`（如补 CHANGELOG），tag 就脱出推送历史，`--follow-tags` 不会带它，publish 不触发。规范顺序：改完 CHANGELOG 先 amend，**最后**再 `npm version`；若已弄错，`git tag -d` 重打指向当前 commit 并单独 `git push <tag>`。
 
 - publish.yml 的坑都已修：e2e 需要（workflow 里 `npm install -g @earendil-works/pi-coding-agent`）；OIDC 需要 npm ≥ 11.5.1（workflow 里 `npm install -g npm@latest`）；不要设 `NODE_AUTH_TOKEN`（假值也会干扰 OIDC）。
 - **npm 侧 Trusted Publisher 配置**：仓库 `ifyour/pi-tty7-tab-namer` + workflow `publish.yml` + environment 留空 + **Allowed actions 必须勾 `npm publish`**（2026-09-03 后新建的配置默认只勾 `npm stage publish`，报 `403 OIDC permission denied`）。配置会过期（Expired），重建时注意这个默认值；新建后需在截止时间前发布一次完成验证（Pending validation）。
