@@ -52,6 +52,21 @@ const HISTORY_CHARS = 2000;
 // Subagent auto-name pattern (pi-subagents names child sessions "type#hex8",
 // e.g. "general-purpose#c897cd1c"); such names must never reach the tab.
 const SUBAGENT_NAME = /^[\w-]+#[0-9a-f]{8}$/i;
+// Session replacement (new/resume/fork) rebuilds the extension runner and re-runs
+// the factory in the same process, sharing these module-level values (the factory
+// itself is cached per process, so the module instance is shared — reload may
+// re-import it, but reload also fires session_shutdown, which covers the old run).
+// closureOrdinal: monotonically increasing per factory run; larger = newer.
+// activeOrdinal: claimed by a run at session_start — the newest run always wins
+// regardless of listener dispatch order. namingSessionId: single-flight lock per
+// session across closures (replaces the old per-closure inFlight flag).
+let closureOrdinal = 0;
+let activeOrdinal = 0;
+let namingSessionId: string | null = null;
+// Diagnostic: identifies the module instance in log lines. Two instances in one
+// process (module re-import) share nothing, so cross-closure dedupe would not
+// apply between them — this field makes that visible in the log.
+const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
 // Resolve the tty7 CLI: explicit override first, then known install paths
 // (/usr/local/bin symlink, Homebrew on Apple Silicon, app bundle), else bare
 // "tty7" so spawn falls back to PATH.
@@ -104,6 +119,7 @@ function historyUserMessages(ctx: ExtensionContext): string[] {
 
 export default function (pi: ExtensionAPI) {
 	if (!process.env["TTY7"]) return; // bridge convention: only inside tty7
+	const myOrdinal = ++closureOrdinal; // identity of this factory run; session_start claims ownership
 
 	// Subagent sessions (pi-subagents spawns them in-process via
 	// createAgentSession; they persist a parentSession header and share the same
@@ -120,7 +136,6 @@ export default function (pi: ExtensionAPI) {
 	let gen = 0; // bumped on every session transition; in-flight naming must match
 	let manual = false; // a name arrived that we did not set
 	let suppressInfo = false; // the next session_info_changed is our own setSessionName
-	let inFlight = false;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastCustom: string | null = null; // title we manage; null = leave terminal default
 
@@ -147,9 +162,29 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function stopEvents() {
-		eventsProc?.kill();
+		const p = eventsProc;
 		eventsProc = null;
 		eventsBuf = "";
+		if (!p) return;
+		// Listeners must go before kill(): pi invalidates this extension instance on
+		// session replacement/reload, and data still in flight after kill() would
+		// reach the data handler with a stale pi → assertActive throws as
+		// uncaughtException (raw socket callback, not catchable by pi).
+		p.stdout?.removeAllListeners();
+		p.stderr?.removeAllListeners();
+		p.removeAllListeners("error");
+		p.removeAllListeners("exit");
+		// kill() itself can emit 'error'; an ChildProcess without an error listener
+		// turns that into an uncaughtException — keep a no-op guard instead.
+		p.on("error", () => {});
+		p.kill();
+		// SIGTERM may be ignored by a stuck child; don't accumulate orphans.
+		const reaper = setTimeout(() => {
+			try {
+				p.kill("SIGKILL");
+			} catch {}
+		}, 1000);
+		reaper.unref?.();
 	}
 
 	let lastCtx: ExtensionContext | null = null; // for ui.notify outside event handlers
@@ -184,28 +219,34 @@ export default function (pi: ExtensionAPI) {
 					continue; // partial/malformed line
 				}
 				if (!renamed || typeof renamed.name !== "string") continue;
-				// Echo of our own forward sync → not user intent.
-				if (selfRename !== null && renamed.name === selfRename) {
+				try {
+					// Echo of our own forward sync → not user intent.
+					if (selfRename !== null && renamed.name === selfRename) {
+						selfRename = null;
+						continue;
+					}
 					selfRename = null;
-					continue;
+					// Lazy re-resolve: session may have moved to another tab (resume etc.).
+					if (ourTabId !== renamed.tab) {
+						ourTabId = resolveTabId();
+						if (ourTabId !== renamed.tab) continue;
+					}
+					const name = renamed.name.trim();
+					if (!name) continue; // cleared/whitespace rename → ignore
+					if (pi.getSessionName() === name) continue; // no-op rename
+					manual = true; // user intent: auto-naming never overrides from here
+					log("reverse-sync", { name });
+					tabNameOurs = false; // the user owns the tab name now
+					appliedTabName = name;
+					suppressInfo = true;
+					pi.setSessionName(name);
+					applyName(name);
+					lastCtx?.ui.notify(`Session name set: ${name}`, "info");
+				} catch (err) {
+					// Stale pi (session replaced under us) or any other failure must
+					// never escape this socket callback — it would kill pi.
+					log("reverse-sync-error", { error: err instanceof Error ? err.message : String(err) });
 				}
-				selfRename = null;
-				// Lazy re-resolve: session may have moved to another tab (resume etc.).
-				if (ourTabId !== renamed.tab) {
-					ourTabId = resolveTabId();
-					if (ourTabId !== renamed.tab) continue;
-				}
-				const name = renamed.name.trim();
-				if (!name) continue; // cleared/whitespace rename → ignore
-				if (pi.getSessionName() === name) continue; // no-op rename
-				manual = true; // user intent: auto-naming never overrides from here
-				log("reverse-sync", { name });
-				tabNameOurs = false; // the user owns the tab name now
-				appliedTabName = name;
-				suppressInfo = true;
-				pi.setSessionName(name);
-				applyName(name);
-				lastCtx?.ui.notify(`Session name set: ${name}`, "info");
 			}
 		});
 		eventsProc.on("exit", () => {
@@ -267,10 +308,11 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function tryName(ctx: ExtensionContext, latestPrompt?: string) {
-		const skip = (why: string) => log("skip", { why, prompt: Boolean(latestPrompt), sessionId: ctx.sessionManager.getSessionId() });
+		const sid = ctx.sessionManager.getSessionId();
+		const skip = (why: string) => log("skip", { why, prompt: Boolean(latestPrompt), sessionId: sid, instance: INSTANCE_ID, ordinal: myOrdinal });
 		if (manual) return skip("manual");
 		if (pi.getSessionName()) return skip("already-named");
-		if (inFlight) return skip("in-flight");
+		if (namingSessionId === sid) return skip("in-flight");
 		if (!ctx.model) return skip("no-model");
 		const messages = historyUserMessages(ctx);
 		if (latestPrompt) messages.push(latestPrompt);
@@ -279,8 +321,11 @@ export default function (pi: ExtensionAPI) {
 		if (context.length > HISTORY_CHARS) context = context.slice(-HISTORY_CHARS);
 		const myGen = gen;
 		const model = ctx.model;
-		inFlight = true;
-		log("naming-start", { context: context.slice(-200), sessionId: ctx.sessionManager.getSessionId() });
+		// A session replacement rebuilds the runner; after that this closure's pi
+		// is invalidated and must never be touched from this async continuation.
+		const stale = () => activeOrdinal !== myOrdinal || myGen !== gen;
+		namingSessionId = sid;
+		log("naming-start", { context: context.slice(-200), sessionId: sid, instance: INSTANCE_ID, ordinal: myOrdinal });
 		// Fire-and-forget: naming must not delay the user's turn. On failure
 		// retry up to NAME_RETRIES attempts total with exponential backoff, so a
 		// flaky first call still names the session within seconds.
@@ -317,12 +362,9 @@ export default function (pi: ExtensionAPI) {
 					log("naming-failed", { why: "error", attempt, error: err instanceof Error ? err.message : String(err) });
 				}
 				if (name) {
-					// On a gen change session_start already reset inFlight for the new
-					// session — leave it alone.
-					if (myGen !== gen) return log("naming-dropped", { why: "gen-changed" });
-					inFlight = false;
-					if (manual) return log("naming-dropped", { why: "manual" });
-					if (pi.getSessionName()) return log("naming-dropped", { why: "already-named" });
+					if (stale()) return log("naming-dropped", { why: "session-changed", instance: INSTANCE_ID, ordinal: myOrdinal });
+					if (manual) return log("naming-dropped", { why: "manual", instance: INSTANCE_ID, ordinal: myOrdinal });
+					if (pi.getSessionName()) return log("naming-dropped", { why: "already-named", instance: INSTANCE_ID, ordinal: myOrdinal });
 					log("naming-done", { name, attempt });
 					suppressInfo = true;
 					pi.setSessionName(name);
@@ -331,10 +373,10 @@ export default function (pi: ExtensionAPI) {
 				}
 				if (attempt < NAME_RETRIES) {
 					const backoff = 2 ** attempt * 1000; // 2s, 4s
-					let aborted: "gen" | null = null;
+					let aborted: string | null = null;
 					const iv = setInterval(() => {
 						// Session switched away or user named it: stop retrying.
-						if (myGen !== gen || manual) aborted = "gen";
+						if (stale() || manual) aborted = "stale";
 					}, 250);
 					await new Promise((resolve) => {
 						retryTimer = setTimeout(() => {
@@ -344,24 +386,29 @@ export default function (pi: ExtensionAPI) {
 					});
 					clearInterval(iv);
 					if (aborted || manual) {
-						inFlight = false;
-						return log("naming-dropped", { why: manual ? "manual" : "gen-changed" });
+						return log("naming-dropped", { why: manual ? "manual" : "session-changed" });
 					}
 					log("naming-retry", { attempt: attempt + 1, backoffMs: backoff });
 				}
 			}
-			if (myGen === gen) inFlight = false;
 			log("naming-failed", { why: "exhausted", attempts: NAME_RETRIES });
-		})();
+		})()
+			.finally(() => {
+				// Release the lock on every exit path, including unexpected throws.
+				if (namingSessionId === sid) namingSessionId = null;
+			})
+			.catch((err) => log("naming-error", { error: err instanceof Error ? err.message : String(err) }));
 	}
 
 	pi.on("session_start", (event, ctx) => {
 		if (isSubagent(ctx)) return; // child agent process: the tab belongs to the main session
 		lastCtx = ctx;
 		gen++;
+		activeOrdinal = Math.max(activeOrdinal, myOrdinal); // monotonic claim: the newest run always wins, regardless of listener dispatch order
+		namingSessionId = null; // drop any lock a replaced run still holds (it will stale-drop)
 		manual = false;
 		suppressInfo = false;
-		inFlight = false;
+		log("session-start", { reason: event.reason, ordinal: myOrdinal, instance: INSTANCE_ID });
 		if (retryTimer) {
 			clearTimeout(retryTimer); // kill any pending backoff from the old session
 			retryTimer = null;
@@ -417,6 +464,7 @@ export default function (pi: ExtensionAPI) {
 		if (isSubagent(ctx)) return;
 		// First prompt of an unnamed session, or a retry after a failed attempt.
 		log("trigger", { reason: "before-agent-start" });
-		tryName(ctx, event.prompt);
+		// Custom-message turns (BeforeAgentStartCustomEvent) have no prompt text.
+		tryName(ctx, "prompt" in event ? event.prompt : undefined);
 	});
 }
