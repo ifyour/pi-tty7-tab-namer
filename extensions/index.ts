@@ -37,7 +37,7 @@ function log(event: string, detail: Record<string, unknown> = {}) {
 		try {
 			const s = await stat(LOG_PATH).catch(() => null);
 			if (s && s.size > LOG_MAX_BYTES) await truncate(LOG_PATH);
-			await appendFile(LOG_PATH, JSON.stringify({ t: new Date().toISOString(), event, ...detail }) + "\n");
+			await appendFile(LOG_PATH, JSON.stringify({ t: new Date(Date.now() + 8 * 3600_000).toISOString().replace("Z", "+08:00"), event, ...detail }) + "\n");
 		} catch {}
 	})();
 }
@@ -415,7 +415,10 @@ export default function (pi: ExtensionAPI) {
 		}
 		// /new is a full new cycle: the tab always falls back to the default, even
 		// when the current name came from a manual tty7 rename (reverse sync).
-		if (event.reason === "new" && appliedTabName) {
+		// appliedTabName is per-closure and this closure was just rebuilt by the
+		// runner replacement, so it cannot know what the tab currently shows —
+		// clear unconditionally (tabRename("") on a default-named tab is a no-op).
+		if (event.reason === "new") {
 			tabRename("");
 			tabNameOurs = false;
 		} else if (tabNameOurs && ourTabId) {

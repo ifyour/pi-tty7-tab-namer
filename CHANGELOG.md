@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.4 - 2026-11-14
+
+### 修复
+
+- `/new` 后 tab 名残留：旧守卫 `reason === "new" && appliedTabName` 中 `appliedTabName` 是 per-closure 状态，而 runner 重建后 closure 全新，`appliedTabName` 恒为 null，清空分支永不执行——当旧名字来自反向同步（`tabNameOurs === false`）时 `session_shutdown` 也不清，tab 名必然残留。现改为 `/new` 时无条件 `tabRename("")`（AGENTS.md 第 12 条本就要求连反向同步来的手动名一起清）。
+
+### 其他
+
+- 诊断日志 `t` 字段改为本地时间（+08:00 后缀），排查时不再需要心算 UTC 偏移；旧条目仍为 UTC。
+
 ## 0.1.3 - 2026-10-22
 
 ### 修复
